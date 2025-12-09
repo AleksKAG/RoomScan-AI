@@ -1,0 +1,29 @@
+<video id="camera" autoplay></video>
+    <canvas id="overlay"></canvas>
+    <button onclick="startAR()">Начать AR</button>
+    <script>
+    async function startAR() {
+        const stream = await navigator.mediaDevices.getUserMedia({video: true});
+        document.getElementById('camera').srcObject = stream;
+        // Стриминг на сервер via WebSocket
+        const ws = new WebSocket('ws://localhost:8080/ar-stream');
+        // Отправляйте frames
+    }
+    </script>
+
+<div id="designSection" style="display:none; margin-top: 30px;">
+    <h2>Режим «Дизайнер»</h2>
+    <select id="styleSelect">
+        <option value="скандинавский">Скандинавский</option>
+        <option value="лофт">Лофт</option>
+        <option value="минимализм">Минимализм</option>
+        <option value="классический">Классический</option>
+        <option value="бохо">Бохо</option>
+        <option value="японский минимализм">Японский минимализм</option>
+    </select>
+    <button onclick="generateDesign()">Сгенерировать 4 варианта дизайна</button>
+    <div id="designGallery" style="margin-top: 20px;"></div>
+</div>
+
+
+<video id="arVideo" autoplay></video> 
