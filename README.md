@@ -75,9 +75,7 @@ go run ./cmd/api
 |-----------------------|------------------|---------------------|
 | ![plan](https://) | ![design](https://) | ![ar](https://) |
 
-[Смотреть полное демо (1 минута)](https://)
-
 ## Автор
-Квачев Александр — Go-разработчик  
-GitHub: [AleksKAG](https://github.com/AleksKAG))  
+Квачёв Александр — Go-разработчик  
+GitHub: [AleksKAG](https://github.com/AleksKAG)  
 Telegram: [@Kurtalex27](https://t.me/Kurtalex27)
