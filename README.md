@@ -4,7 +4,7 @@
 ```markdown
 # RoomScan AI — Сканируй комнату → Получай дизайн в AR за 30 секунд
 
-![RoomScan AI](https://)  
+![RoomScan AI]  
 **Go-only бэкенд • OpenCV • Kandinsky/GigaChat • AR в реальном времени**
 
 pet-проект, который превращает обычное видео или камеру телефона в:
