@@ -1,4 +1,5 @@
 # RoomScan-AI
+![Y8QXW](https://github.com/user-attachments/assets/3b9747de-e70e-4dc6-a0b5-2e192342fa45)
 
 ```markdown
 # RoomScan AI — Сканируй комнату → Получай дизайн в AR за 30 секунд
@@ -69,11 +70,9 @@ go run ./cmd/api
 # + установи OpenCV: https://gocv.io/getting-started/
 ```
 
-## Скриншоты и видео
-
-| Загрузка видео → план | Режим «Дизайнер» | AR-режим в браузере |
-|-----------------------|------------------|---------------------|
-| ![plan](https://) | ![design](https://) | ![ar](https://) |
+## Дизайн 
+![0yCZ5](https://github.com/user-attachments/assets/8a5acb18-3813-4267-8f29-bd1fc7b0df6b)
+![ZCRe8](https://github.com/user-attachments/assets/adaae531-608a-478e-954e-bab66c0039bb)
 
 ## Автор
 Квачёв Александр — Go-разработчик  
