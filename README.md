@@ -2,9 +2,9 @@
 ![Y8QXW](https://github.com/user-attachments/assets/3b9747de-e70e-4dc6-a0b5-2e192342fa45)
 
 ```markdown
-# RoomScan AI — Сканируй комнату → Получай дизайн в AR за 30 секунд
+# RoomScan-AI  — Сканируй комнату → Получай дизайн в AR за 30 секунд
 
-![RoomScan AI]  
+![RoomScan-AI ]  
 **Go-only бэкенд • OpenCV • Kandinsky/GigaChat • AR в реальном времени**
 
 pet-проект, который превращает обычное видео или камеру телефона в:
@@ -26,7 +26,7 @@ pet-проект, который превращает обычное видео 
 
 ## Почему это круто
 
-| Пункт                         | RoomScan AI                     | Аналоги (MagicPlan, Planner5D, Houzz и т.д.) |
+| Пункт                         | RoomScan-AI                     | Аналоги (MagicPlan, Planner5D, Houzz и т.д.) |
 |-------------------------------|----------------------------------|---------------------------------------------|
 | Язык бэкенда                  | 100% Go (один бинарник)          | Python/Node.js + тяжёлые ML-фреймворки      |
 | AI-генерация дизайна          | Kandinsky 3.1 / GigaChat Pro     | Платные западные API или свои модели        |
@@ -58,8 +58,8 @@ pet-проект, который превращает обычное видео 
 ## Быстрый старт (2 минуты)
 
 ```bash
-git clone https://github.com/yourname/roomscan.git
-cd roomscan
+git clone https://github.com/AleksKAG/RoomScan-AI.git
+cd RoomScan-AI
 docker compose up --build
 # Готово! Открывай http://localhost:8080
 ```

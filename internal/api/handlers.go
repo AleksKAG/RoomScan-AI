@@ -12,13 +12,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/yourname/roomscan/internal/ar"
-	"github.com/yourname/roomscan/internal/design"
-	"github.com/yourname/roomscan/internal/worker"
+	"github.com/AleksKAG/RoomScan-AI/internal/ar"
+	"github.com/AleksKAG/RoomScan-AI/internal/design"
+	"github.com/AleksKAG/RoomScan-AI/internal/worker"
 	"gocv.io/x/gocv"
 )
 
-const uploadDir = "/tmp/roomscan_uploads"
+const uploadDir = "/tmp/RoomScan-AI_uploads"
 
 func init() {
 	_ = os.MkdirAll(uploadDir, 0755)

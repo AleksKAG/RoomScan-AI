@@ -2,7 +2,7 @@ package ar
 
   import (
       "gocv.io/x/gocv"
-      "github.com/yourname/roomscan/internal/geometry"
+      "github.com/AleksKAG/RoomScan-AI/internal/geometry"
   )
 
   func ScanRoom(frame gocv.Mat) geometry.Polygon {

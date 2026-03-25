@@ -13,7 +13,7 @@ async function generateDesign() {
     gallery.innerHTML = '';
     data.designs.forEach(path => {
         const img = document.createElement('img');
-        img.src = '/' + path.replace('/tmp/roomscan_uploads/', 'results/'); // нужно добавить FileServer для results
+        img.src = '/' + path.replace('/tmp/RoomScan-AI_uploads/', 'results/'); // нужно добавить FileServer для results
         img.style.width = '45%';
         img.style.margin = '10px';
         gallery.appendChild(img);

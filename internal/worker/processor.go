@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 
 	"github.com/phpdave11/gofpdf"
-	"github.com/yourname/roomscan/internal/geometry"
-	"github.com/yourname/roomscan/internal/render"
+	"github.com/AleksKAG/RoomScan-AI/internal/geometry"
+	"github.com/AleksKAG/RoomScan-AI/internal/render"
 )
 
 func ProcessVideo(id, videoPath string) error {
@@ -36,7 +36,7 @@ func ProcessVideo(id, videoPath string) error {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.AddPage()
 	pdf.SetFont("Arial", "B", 16)
-	pdf.Cell(40, 10, "RoomScan Report")
+	pdf.Cell(40, 10, "RoomScan-AI Report")
 	pdf.Image(planPath, 10, 20, 180, 0, false, "", 0, "")
 	pdf.OutputFileAndClose(filepath.Join(resultsDir, "report.pdf"))
 

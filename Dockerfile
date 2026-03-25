@@ -18,7 +18,7 @@ RUN go mod download
 COPY . .
 
 # Собираем с CGO (нужно для gocv)
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /roomscan ./cmd/api/main.go
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /RoomScan-AI ./cmd/api/main.go
 
 # ==================== RUNTIME STAGE ====================
 FROM debian:bookworm-slim
@@ -31,14 +31,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаём директорию для загрузок
-RUN mkdir -p /tmp/roomscan_uploads
+RUN mkdir -p /tmp/RoomScan-AI_uploads
 
 WORKDIR /app
 
 # Копируем только бинарник из builder
-COPY --from=builder /roomscan /roomscan
+COPY --from=builder /RoomScan-AI /RoomScan-AI
 
 EXPOSE 8080
 
 # Запуск
-CMD ["/roomscan"]
+CMD ["/RoomScan-AI"]
