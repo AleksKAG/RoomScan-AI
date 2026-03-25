@@ -9,10 +9,10 @@ import (
 )
 
 func main() {
-	addr := ":8080"
-	if v := os.Getenv("ROOMSCAN_ADDR"); v != "" {
-		addr = v
-	}
+addr := ":8080"
+if v := os.Getenv("PORT"); v != "" {
+    addr = ":" + v
+}
 
 	r := api.NewRouter()
 
