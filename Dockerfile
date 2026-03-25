@@ -1,11 +1,44 @@
-FROM golang:1.22-buster AS build
-RUN apt-get update && apt-get install -y libopencv-dev ffmpeg
-WORKDIR /app
-COPY . .
-RUN go mod download && CGO_ENABLED=1 go build -o /roomscan cmd/api/main.go
+# ==================== BUILD STAGE ====================
+FROM golang:1.22-bookworm AS builder
 
-FROM debian:buster-slim
-RUN apt-get update && apt-get install -y libopencv4.2 ffmpeg ca-certificates
-COPY --from=build /roomscan /roomscan
+# Устанавливаем зависимости OpenCV + ffmpeg
+RUN apt-get update && apt-get install -y \
+    libopencv-dev \
+    ffmpeg \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Копируем go.mod и скачиваем зависимости
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Копируем весь исходный код
+COPY . .
+
+# Собираем с CGO (нужно для gocv)
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /roomscan ./cmd/api/main.go
+
+# ==================== RUNTIME STAGE ====================
+FROM debian:bookworm-slim
+
+# Устанавливаем runtime-библиотеки (без dev-пакетов)
+RUN apt-get update && apt-get install -y \
+    libopencv4.7 \
+    ffmpeg \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Создаём директорию для загрузок
+RUN mkdir -p /tmp/roomscan_uploads
+
+WORKDIR /app
+
+# Копируем только бинарник из builder
+COPY --from=builder /roomscan /roomscan
+
 EXPOSE 8080
+
+# Запуск
 CMD ["/roomscan"]
