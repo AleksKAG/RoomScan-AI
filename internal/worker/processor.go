@@ -1,118 +1,107 @@
 package worker
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
+
+	"github.com/hibiken/asynq"
+	"gocv.io/x/gocv"
 
 	"roomscan-ai/internal/config"
 	"roomscan-ai/internal/geometry"
-)
-
-type Status string
-
-const (
-	StatusPending    Status = "pending"
-	StatusProcessing Status = "processing"
-	StatusCompleted  Status = "completed"
-	StatusFailed     Status = "failed"
+	"roomscan-ai/internal/queue"
 )
 
 type Processor struct {
-	cfg     *config.Config
-	statuses map[string]Status
-	mu      sync.RWMutex
+	cfg *config.Config
 }
 
 func NewProcessor(cfg *config.Config) *Processor {
-	return &Processor{
-		cfg:      cfg,
-		statuses: make(map[string]Status),
-	}
+	return &Processor{cfg: cfg}
 }
 
-func (p *Processor) ProcessVideo(id, srcPath string) error {
-	p.updateStatus(id, StatusProcessing)
-	slog.Info("Started processing video", "id", id, "path", srcPath)
-
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("Panic in worker", "id", id, "panic", r)
-			p.updateStatus(id, StatusFailed)
-		}
-	}()
-
-	// 1. Извлечение кадров (заглушка, здесь должна быть логика ffmpeg или gocv.VideoCapture)
-	framePath := filepath.Join(p.cfg.TempDir, id+"_frame.jpg")
-	
-	// потом... здесь должен извлекаеться ключевой кадр из видео
-	// Для примера просто копируем или создаем заглушку
-	if err := p.extractKeyFrame(srcPath, framePath); err != nil {
-		p.updateStatus(id, StatusFailed)
-		return fmt.Errorf("extract frame: %w", err)
+// HandleProcessVideo реализует интерфейс asynq.Handler
+func (p *Processor) HandleProcessVideo(ctx context.Context, t *asynq.Task) error {
+	var payload struct {
+		ID   string `json:"id"`
+		Path string `json:"path"`
 	}
-	defer os.Remove(framePath) // Очистка временного кадра
+	
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
+	}
 
-	// 2. Детекция линий с использованием конфигурационных порогов
-	lines, err := geometry.DetectLines(framePath, p.cfg.CannyThreshold1, p.cfg.CannyThreshold2, p.cfg.HoughThreshold, p.cfg.MinLineLength, p.cfg.MaxLineGap)
+	slog.Info("Processing video task started", "id", payload.ID, "path", payload.Path)
+
+	// 1. Извлечение ключевого кадра
+	framePath := filepath.Join(p.cfg.TempDir, payload.ID+"_frame.jpg")
+	if err := p.extractKeyFrame(payload.Path, framePath); err != nil {
+		return fmt.Errorf("extract frame: %w", err) // Ошибка вернет задачу в очередь на retry
+	}
+	defer os.Remove(framePath) // Гарантированная очистка
+
+	// 2. Детекция линий
+	lines, err := geometry.DetectLines(
+		framePath, 
+		p.cfg.CannyThreshold1, 
+		p.cfg.CannyThreshold2, 
+		p.cfg.HoughThreshold, 
+		p.cfg.MinLineLength, 
+		p.cfg.MaxLineGap,
+	)
 	if err != nil {
-		p.updateStatus(id, StatusFailed)
 		return fmt.Errorf("detect lines: %w", err)
 	}
 
-	// 3. Построение полигона
+	// 3. Построение и сохранение полигона
 	poly := geometry.FitPolygonFromLines(lines)
+	resultPath := filepath.Join(p.cfg.UploadDir, payload.ID+"_result.json")
 	
-	// 4. Сохранение результата
-	resultPath := filepath.Join(p.cfg.UploadDir, id+"_result.json")
 	if err := geometry.SavePolygon(resultPath, poly); err != nil {
-		p.updateStatus(id, StatusFailed)
 		return fmt.Errorf("save polygon: %w", err)
 	}
 
-	p.updateStatus(id, StatusCompleted)
-	slog.Info("Processing completed successfully", "id", id)
+	slog.Info("Video processing completed successfully", "id", payload.ID)
 	return nil
 }
 
-func (p *Processor) GetStatus(id string) (Status, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	
-	status, exists := p.statuses[id]
-	if !exists {
-		return "", fmt.Errorf("status not found")
-	}
-	return status, nil
-}
-
-func (p *Processor) updateStatus(id string, status Status) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.statuses[id] = status
-}
-
-func (p *Processor) CleanupTemp() {
-	slog.Info("Cleaning up temporary files...")
-	// Простая реализация: удаление всех файлов в TempDir
-	entries, err := os.ReadDir(p.cfg.TempDir)
-	if err != nil {
-		slog.Error("Failed to read temp dir", "error", err)
-		return
-	}
-	for _, entry := range entries {
-		os.Remove(filepath.Join(p.cfg.TempDir, entry.Name()))
-	}
-}
-
-// extractKeyFrame - заглушка для извлечения кадра. 
-// В продакшене здесь должен быть вызов ffmpeg или gocv.VideoCapture
+// extractKeyFrame РЕАЛЬНАЯ реализация через OpenCV
 func (p *Processor) extractKeyFrame(src, dst string) error {
-	// TODO: Реализовать через gocv.VideoCapture или exec.Command("ffmpeg", ...)
-	slog.Warn("extractKeyFrame is a stub, using dummy file")
+	cap, err := gocv.OpenVideoCapture(src)
+	if err != nil {
+		return fmt.Errorf("failed to open video capture: %w", err)
+	}
+	defer cap.Close()
+
+	mat := gocv.NewMat()
+	defer mat.Close()
+
+	// Берем 30-й кадр (примерно 1 секунда при 30fps), 
+	// чтобы дать пользователю время стабилизировать камеру после начала записи.
+	targetFrame := 30
+	currentFrame := 0
+
+	for {
+		if ok := cap.Read(&mat); !ok {
+			break // Конец видео или ошибка чтения
+		}
+		currentFrame++
+		if currentFrame >= targetFrame {
+			break
+		}
+	}
+
+	if mat.Empty() {
+		return fmt.Errorf("video is empty or too short to extract frame")
+	}
+
+	if !gocv.IMWrite(dst, mat) {
+		return fmt.Errorf("failed to write frame to %s", dst)
+	}
 	
-	// Создаем пустой файл для прохождения тестов геометрии
-	return os.WriteFile(dst, []byte("dummy"), 0644)
+	return nil
 }
