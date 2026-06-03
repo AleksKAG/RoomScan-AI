@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 
 	"github.com/hibiken/asynq"
 
+	"github.com/AleksKAG/RoomScan-AI/internal/ai"
 	"github.com/AleksKAG/RoomScan-AI/internal/config"
 	"github.com/AleksKAG/RoomScan-AI/internal/db"
 	"github.com/AleksKAG/RoomScan-AI/internal/geometry"
@@ -20,10 +20,11 @@ import (
 type Processor struct {
 	cfg *config.Config
 	db  *db.Store
+	ai  *ai.Generator
 }
 
-func NewProcessor(cfg *config.Config, db *db.Store) *Processor {
-	return &Processor{cfg: cfg, db: db}
+func NewProcessor(cfg *config.Config, db *db.Store, aiGen *ai.Generator) *Processor {
+	return &Processor{cfg: cfg, db: db, ai: aiGen}
 }
 
 func (p *Processor) HandleProcessVideo(ctx context.Context, t *asynq.Task) error {
@@ -38,13 +39,8 @@ func (p *Processor) HandleProcessVideo(ctx context.Context, t *asynq.Task) error
 	slog.Info("Processing started (STUB MODE)", "id", payload.ID)
 	p.db.UpdateStatus(ctx, payload.ID, db.StatusProcessing, "", "")
 
-	// Создаем фиктивный результат
-	poly := geometry.Polygon{
-		{X: 100, Y: 100},
-		{X: 500, Y: 100},
-		{X: 500, Y: 400},
-		{X: 100, Y: 400},
-	}
+	lines, _ := geometry.DetectLines(payload.Path, 50, 150, 100, 30, 10)
+	poly := geometry.FitPolygonFromLines(lines)
 
 	resultPath := filepath.Join(p.cfg.UploadDir, payload.ID+"_result.json")
 	if err := geometry.SavePolygon(resultPath, poly); err != nil {
@@ -54,7 +50,6 @@ func (p *Processor) HandleProcessVideo(ctx context.Context, t *asynq.Task) error
 
 	resultURL := "/uploads/" + payload.ID + "_result.json"
 	p.db.UpdateStatus(ctx, payload.ID, db.StatusCompleted, resultURL, "")
-	
 	slog.Info("Processing completed (STUB MODE)", "id", payload.ID)
 	return nil
 }
