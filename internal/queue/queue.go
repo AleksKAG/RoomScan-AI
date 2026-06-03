@@ -13,18 +13,22 @@ const (
 	TypeProcessVideo = "video:process"
 )
 
+// Client для отправки задач в очередь
 type Client struct {
 	redis *asynq.Client
 }
 
+// NewClient создает новый клиент очереди
 func NewClient(redisAddr string) *Client {
 	return &Client{
 		redis: asynq.NewClient(asynq.RedisClientOpt{Addr: redisAddr}),
 	}
 }
 
+// EnqueueProcessVideo добавляет задачу обработки видео в очередь
 func (c *Client) EnqueueProcessVideo(taskID, filePath string) error {
-	task := asynq.NewTask(TypeProcessVideo, []byte(fmt.Sprintf(`{"id":"%s","path":"%s"}`, taskID, filePath)))
+	payload := fmt.Sprintf(`{"id":"%s","path":"%s"}`, taskID, filePath)
+	task := asynq.NewTask(TypeProcessVideo, []byte(payload))
 	
 	info, err := c.redis.EnqueueContext(context.Background(), task, asynq.MaxRetry(3), asynq.Timeout(5*time.Minute))
 	if err != nil {
@@ -35,19 +39,22 @@ func (c *Client) EnqueueProcessVideo(taskID, filePath string) error {
 	return nil
 }
 
+// Close закрывает клиент
 func (c *Client) Close() {
 	c.redis.Close()
 }
 
-// VideoProcessor определяет интерфейс для обработки видео
+// VideoProcessor интерфейс для обработчика видео
 type VideoProcessor interface {
 	HandleProcessVideo(ctx context.Context, t *asynq.Task) error
 }
 
+// Server сервер очереди задач
 type Server struct {
 	srv *asynq.Server
 }
 
+// NewServer создает и запускает сервер очереди
 func NewServer(redisAddr string, processor VideoProcessor) *Server {
 	srv := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: redisAddr},
@@ -66,6 +73,7 @@ func NewServer(redisAddr string, processor VideoProcessor) *Server {
 	return &Server{srv: srv}
 }
 
+// Stop останавливает сервер
 func (s *Server) Stop() {
 	s.srv.Stop()
 	s.srv.Shutdown()
