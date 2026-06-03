@@ -2,24 +2,25 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"gocv.io/x/gocv"
 
 	"roomscan-ai/internal/config"
-	"roomscan-ai/internal/worker"
+	"roomscan-ai/internal/db"
+	"roomscan-ai/internal/queue"
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// TODO: В продакшене заменить 
 		return r.Header.Get("Origin") == "http://localhost:3000" || r.Header.Get("Origin") == ""
 	},
 	ReadBufferSize:  1024,
@@ -27,82 +28,126 @@ var upgrader = websocket.Upgrader{
 }
 
 type Handler struct {
-	cfg    *config.Config
-	worker *worker.Processor
+	cfg         *config.Config
+	queueClient *queue.Client
+	db          *db.Store
 }
 
-func NewHandler(cfg *config.Config, worker *worker.Processor) *Handler {
-	return &Handler{cfg: cfg, worker: worker}
+func NewHandler(cfg *config.Config, queueClient *queue.Client, db *db.Store) *Handler {
+	return &Handler{cfg: cfg, queueClient: queueClient, db: db}
 }
 
-// HandleUpload обрабатывает загрузку файла с валидацией
+// HandleUpload godoc
+// @Summary Upload a video or image for room scanning
+// @Description Accepts a file, validates it, saves it, and enqueues a processing task.
+// @Tags scans
+// @Accept multipart/form-data
+// @Produce json
+// @Param file formData file true "Video or Image file (mp4, mov, avi, jpg, png)"
+// @Success 202 {object} map[string]string "Task enqueued"
+// @Failure 400 {object} map[string]string "Bad request"
+// @Failure 413 {object} map[string]string "File too large"
+// @Failure 429 {object} map[string]string "Too many requests"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /api/v1/upload [post]
 func (h *Handler) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Ограничение размера запроса (защита от DoS)
 	r.Body = http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadMB*1024*1024)
 	if err := r.ParseMultipartForm(h.cfg.MaxUploadMB * 1024 * 1024); err != nil {
-		http.Error(w, "File too large", http.StatusRequestEntityTooLarge)
+		http.Error(w, `{"error": "File too large"}`, http.StatusRequestEntityTooLarge)
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "Failed to get file", http.StatusBadRequest)
+		http.Error(w, `{"error": "Failed to get file"}`, http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	// Валидация расширения
 	ext := strings.ToLower(filepath.Ext(header.Filename))
-	isAllowed := false
-	for _, allowed := range h.cfg.AllowedExts {
-		if ext == allowed {
-			isAllowed = true
-			break
-		}
-	}
-	if !isAllowed {
-		http.Error(w, "Invalid file type", http.StatusUnsupportedMediaType)
+	allowedExts := map[string]bool{".mp4": true, ".mov": true, ".avi": true, ".jpg": true, ".png": true}
+	if !allowedExts[ext] {
+		http.Error(w, `{"error": "Invalid file type"}`, http.StatusUnsupportedMediaType)
 		return
 	}
 
-	// Генерация безопасного имени файла
 	fileID := uuid.New().String()
 	dst := filepath.Join(h.cfg.UploadDir, fileID+ext)
 
 	out, err := os.Create(dst)
 	if err != nil {
 		slog.Error("Failed to create file", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, `{"error": "Internal server error"}`, http.StatusInternalServerError)
 		return
 	}
-	defer out.Close()
 
 	if _, err := io.Copy(out, file); err != nil {
-		os.Remove(dst) // Откат при ошибке
-		http.Error(w, "Failed to save file", http.StatusInternalServerError)
+		out.Close()
+		os.Remove(dst)
+		http.Error(w, `{"error": "Failed to save file"}`, http.StatusInternalServerError)
+		return
+	}
+	out.Close()
+
+	scan := &db.Scan{
+		ID:       fileID,
+		Status:   db.StatusQueued,
+		FilePath: dst,
+	}
+	if err := h.db.CreateScan(r.Context(), scan); err != nil {
+		slog.Error("Failed to create scan record in DB", "error", err)
+		os.Remove(dst)
+		http.Error(w, `{"error": "Internal server error"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// Запуск обработки в фоне
-	go func(id, path string) {
-		if err := h.worker.ProcessVideo(id, path); err != nil {
-			slog.Error("Background processing failed", "id", id, "error", err)
-		}
-	}(fileID, dst)
+	if err := h.queueClient.EnqueueProcessVideo(fileID, dst); err != nil {
+		h.db.UpdateStatus(r.Context(), fileID, db.StatusFailed, "", err.Error())
+		http.Error(w, `{"error": "Failed to start processing"}`, http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
 	json.NewEncoder(w).Encode(map[string]string{
 		"id":     fileID,
-		"status": "processing",
+		"status": string(db.StatusQueued),
 	})
 }
 
-// HandleARStream Исправлена утечка памяти!
+// HandleStatus godoc
+// @Summary Get processing status of a scan
+// @Description Returns the current status of the room scan processing task.
+// @Tags scans
+// @Produce json
+// @Param id path string true "Scan ID"
+// @Success 200 {object} db.Scan
+// @Failure 404 {object} map[string]string "Not found"
+// @Router /api/v1/status/{id} [get]
+func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	scan, err := h.db.GetScan(r.Context(), id)
+	if err != nil {
+		http.Error(w, `{"error": "Not found"}`, http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(scan)
+}
+
+// HandleARStream godoc
+// @Summary WebSocket stream for AR processing
+// @Description Receives image frames and returns processed AR frames.
+// @Tags ar
+// @Param id path string true "Scan ID"
+// @Router /api/v1/ws/ar/{id} [get]
 func (h *Handler) HandleARStream(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -127,17 +172,14 @@ func (h *Handler) HandleARStream(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// ИСПРАВЛЕНИЕ: Обработка в анонимной функции или явный Close() в конце итерации,
-		// а НЕ defer внутри цикла!
+		// ИСПРАВЛЕНИЕ УТЕЧКИ: Анонимная функция гарантирует вызов defer на каждой итерации
 		func() {
 			img, err := gocv.IMDecode(msg, gocv.IMReadColor)
 			if err != nil {
-				slog.Warn("Failed to decode image", "error", err)
 				return
 			}
-			defer img.Close() // Теперь defer сработает при выходе из этой анонимной функции (одной итерации)
+			defer img.Close()
 
-			// Пример обработки: преобразование в оттенки серого и обратно (заглушка для AR)
 			gray := gocv.NewMat()
 			defer gray.Close()
 			gocv.CvtColor(img, &gray, gocv.ColorBGRToGray)
@@ -146,34 +188,15 @@ func (h *Handler) HandleARStream(w http.ResponseWriter, r *http.Request) {
 			defer processed.Close()
 			gocv.CvtColor(gray, &processed, gocv.ColorGrayToBGR)
 
-			// Кодирование обратно в JPEG для отправки
 			buf, err := gocv.IMEncode(".jpg", processed)
 			if err != nil {
 				return
 			}
 			defer buf.Close()
 
-			// Отправка результата
 			if err := conn.WriteMessage(websocket.BinaryMessage, buf.GetBytes()); err != nil {
 				slog.Error("Failed to write WebSocket message", "error", err)
 			}
 		}()
 	}
-}
-
-// HandleStatus возвращает статус обработки
-func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	
-	status, err := h.worker.GetStatus(id)
-	if err != nil {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":     id,
-		"status": status,
-	})
 }
