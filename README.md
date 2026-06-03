@@ -1,3 +1,5 @@
+
+<img width="784" height="980" alt="565582569-8a5acb18-3813-4267-8f29-bd1fc7b0df6b" src="https://github.com/user-attachments/assets/b6e73f4d-5f92-4b28-a57d-59928d4d18d6" />
 # RoomScan-AI
 
 
@@ -71,7 +73,7 @@ go run ./cmd/api
 ```
 
 ## Дизайн 
-![0yCZ5](https://github.com/user-attachments/assets/8a5acb18-3813-4267-8f29-bd1fc7b0df6b)
+![0yCZ5](https://github.com/user-attachments/assets/b6e73f4d-5f92-4b28-a57d-59928d4d18d6)
 ![ZCRe8](https://github.com/user-attachments/assets/adaae531-608a-478e-954e-bab66c0039bb)
 
 ## Автор
