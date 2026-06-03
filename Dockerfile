@@ -1,44 +1,72 @@
-# ==================== BUILD STAGE ====================
-FROM golang:1.22-bookworm AS builder
+# --- Этап 1: Сборка ---
+FROM golang:1.22-bullseye AS builder
 
-# Устанавливаем зависимости OpenCV + ffmpeg
+# Установка зависимостей для gocv (OpenCV)
 RUN apt-get update && apt-get install -y \
-    libopencv-dev \
-    ffmpeg \
+    build-essential \
+    cmake \
     pkg-config \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libxvidcore-dev \
+    libx264-dev \
+    libgtk-3-dev \
+    libatlas-base-dev \
+    gfortran \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Копируем go.mod и скачиваем зависимости
+# Кэширование зависимостей
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Копируем весь исходный код
+# Копирование исходного кода
 COPY . .
 
-# Собираем с CGO (нужно для gocv)
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /RoomScan-AI ./cmd/api/main.go
+# Сборка бинарного файла (статическая линковка предпочтительна, но для OpenCV нужны динамические библиотеки)
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o roomscan .
 
-# ==================== RUNTIME STAGE ====================
-FROM debian:bookworm-slim
+# --- Этап 2: Рантайм ---
+FROM debian:bullseye-slim
 
-# Устанавливаем runtime-библиотеки (без dev-пакетов)
+# Установка только необходимых runtime-зависимостей для OpenCV
 RUN apt-get update && apt-get install -y \
-    libopencv4.7 \
-    ffmpeg \
+    libjpeg62-turbo \
+    libpng16-16 \
+    libtiff5 \
+    libavcodec58 \
+    libavformat58 \
+    libswscale5 \
+    libgtk-3-0 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Создаём директорию для загрузок
-RUN mkdir -p /tmp/RoomScan-AI_uploads
-
 WORKDIR /app
 
-# Копируем только бинарник из builder
-COPY --from=builder /RoomScan-AI /RoomScan-AI
+# Создание non-root пользователя для безопасности
+RUN useradd -m -u 1000 roomscan
+USER roomscan
+
+# Копирование бинарника из builder
+COPY --from=builder /app/roomscan .
+
+# Создание директорий для файлов с правильными правами
+RUN mkdir -p /app/uploads /app/tmp && chown roomscan:roomscan /app/uploads /app/tmp
+
+ENV SERVER_PORT=:8080
+ENV UPLOAD_DIR=/app/uploads
+ENV TEMP_DIR=/app/tmp
 
 EXPOSE 8080
 
-# Запуск
-CMD ["/RoomScan-AI"]
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+CMD ["./roomscan"]
