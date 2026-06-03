@@ -1,1 +1,65 @@
 
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: roomscan_postgres
+    environment:
+      POSTGRES_USER: roomscan
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: roomscan
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roomscan -d roomscan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: roomscan_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: roomscan_app
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=:8080
+      - DATABASE_URL=postgres://roomscan:secret@postgres:5432/roomscan?sslmode=disable
+      - REDIS_ADDR=redis:6379
+      - UPLOAD_DIR=/app/uploads
+      - TEMP_DIR=/app/tmp
+      # Заглушки для AI (замените на реальные ключи при необходимости)
+      - KANDINSKY_URL=https://api-keyai.ru/v1/kandinsky/jpg
+      - KANDINSKY_KEY=your_kandinsky_key_here
+      - GIGACHAT_URL=https://gigachat.devices.sberbank.ru/api/v1/chat/completions
+      - GIGACHAT_KEY=your_gigachat_key_here
+    volumes:
+      - ./uploads:/app/uploads
+      - ./tmp:/app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
