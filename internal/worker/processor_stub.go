@@ -12,9 +12,9 @@ import (
 
 	"github.com/hibiken/asynq"
 
-	"roomscan-ai/internal/config"
-	"roomscan-ai/internal/db"
-	"roomscan-ai/internal/geometry"
+	"github.com/AleksKAG/RoomScan-AI/internal/config"
+	"github.com/AleksKAG/RoomScan-AI/internal/db"
+	"github.com/AleksKAG/RoomScan-AI/internal/geometry"
 )
 
 type Processor struct {
