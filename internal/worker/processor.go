@@ -11,10 +11,10 @@ import (
 	"github.com/hibiken/asynq"
 	"gocv.io/x/gocv"
 
-	"roomscan-ai/internal/ai"
-	"roomscan-ai/internal/config"
-	"roomscan-ai/internal/db"
-	"roomscan-ai/internal/geometry"
+	"github.com/AleksKAG/RoomScan-AI/internal/ai"
+	"github.com/AleksKAG/RoomScan-AI/internal/config"
+	"github.com/AleksKAG/RoomScan-AI/internal/db"
+	"github.com/AleksKAG/RoomScan-AI/internal/geometry"
 )
 
 type Processor struct {

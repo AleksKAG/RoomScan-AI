@@ -14,9 +14,9 @@ import (
 	"github.com/gorilla/websocket"
 	"gocv.io/x/gocv"
 
-	"roomscan-ai/internal/config"
-	"roomscan-ai/internal/db"
-	"roomscan-ai/internal/queue"
+	"github.com/AleksKAG/RoomScan-AI/internal/config"
+	"github.com/AleksKAG/RoomScan-AI/internal/db"
+	"github.com/AleksKAG/RoomScan-AI/internal/queue"
 )
 
 var upgrader = websocket.Upgrader{

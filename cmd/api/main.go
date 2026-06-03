@@ -14,17 +14,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 	
-	"roomscan-ai/internal/ai"
-	"roomscan-ai/internal/api"
-	_ "roomscan-ai/docs"
-	"roomscan-ai/internal/cleanup"
-	"roomscan-ai/internal/config"
-	"roomscan-ai/internal/db"
-	"roomscan-ai/internal/queue"
-	"roomscan-ai/internal/worker"
+	"github.com/AleksKAG/RoomScan-AI/internal/ai"
+	"github.com/AleksKAG/RoomScan-AI/internal/api"
+	_ "github.com/AleksKAG/RoomScan-AI/docs"
+	"github.com/AleksKAG/RoomScan-AI/internal/cleanup"
+	"github.com/AleksKAG/RoomScan-AI/internal/config"
+	"github.com/AleksKAG/RoomScan-AI/internal/db"
+	"github.com/AleksKAG/RoomScan-AI/internal/queue"
+	"github.com/AleksKAG/RoomScan-AI/internal/worker"
 )
 
-// @title RoomScan-AI API
+// @title github.com/AleksKAG/RoomScan-AI API
 // @version 1.0
 // @description API for room scanning, geometry detection, and AI design generation.
 // @host localhost:8080
