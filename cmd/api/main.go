@@ -14,8 +14,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 	
+	"roomscan-ai/internal/ai"
 	"roomscan-ai/internal/api"
-	_ "roomscan-ai/docs" // ВАЖНО: подключает сгенерированную swagger-документацию
+	_ "roomscan-ai/docs"
+	"roomscan-ai/internal/cleanup"
 	"roomscan-ai/internal/config"
 	"roomscan-ai/internal/db"
 	"roomscan-ai/internal/queue"
@@ -62,38 +64,46 @@ func main() {
 	qClient := queue.NewClient(redisAddr)
 	defer qClient.Close()
 
-	processor := worker.NewProcessor(cfg, store)
+	// 3. Инициализация AI генератора
+	aiGen := ai.NewGenerator(
+		os.Getenv("KANDINSKY_URL"),
+		os.Getenv("KANDINSKY_KEY"),
+		os.Getenv("GIGACHAT_URL"),
+		os.Getenv("GIGACHAT_KEY"),
+	)
+
+	// 4. Инициализация воркера
+	processor := worker.NewProcessor(cfg, store, aiGen)
 	qServer := queue.NewServer(redisAddr, processor)
 	defer qServer.Stop()
 
-	// 3. API Handler
+	// 5. Запуск фоновой очистки (удаляет файлы старше 24 часов)
+	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
+	defer cancelCleanup()
+	go cleanup.StartRoutine(cleanupCtx, []string{cfg.UploadDir, cfg.TempDir}, 24*time.Hour)
+
+	// 6. API Handler
 	apiHandler := api.NewHandler(cfg, qClient, store)
 
-	// 4. Роутер с middleware
+	// 7. Роутер
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer, middleware.Timeout(60 * time.Second))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 	r.Handle("/metrics", promhttp.Handler())
-	
-	// Swagger UI: http://localhost:8080/swagger/index.html
-	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("/swagger/doc.json"), 
-	))
+	r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL("/swagger/doc.json")))
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Rate Limiting применяется только к загрузке
 		r.With(api.RealIPMiddleware, api.RateLimiter()).Post("/upload", apiHandler.HandleUpload)
 		r.Get("/status/{id}", apiHandler.HandleStatus)
 		r.Get("/ws/ar/{id}", apiHandler.HandleARStream)
 	})
+
+	// Раздача статических файлов (результатов)
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadDir))))
 
 	srv := &http.Server{
 		Addr:         cfg.ServerPort,
