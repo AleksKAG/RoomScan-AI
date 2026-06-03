@@ -90,19 +90,11 @@ func GenerateWithKandinsky(planImagePath string, style string) ([]string, error)
 // ----------------------
 // Вариант 2: GigaChat Pro Vision 
 // ----------------------
-func GenerateWithGigaChat(planImagePath string, style string) ([]string, error) {
-	// Нужно получить токен через https://developers.sber.ru
-	// Пример запроса (упрощённо):
-	payload := map[string]interface{}{
-		"model": "GigaChat-Pro",
-		"messages": []map[string]string{
-			{
-				"role": "user",
-				"content": fmt.Sprintf("Сделай красивый дизайн этой комнаты в стиле: %s. Верни 4 варианта.", style),
-			},
-		},
-		"images": []string{ "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(...)},
-	}
+func GenerateWithGigaChat(prompt string) (string, error) {
+    // TODO: Реализовать интеграцию с GigaChat API
+    slog.Info("GenerateWithGigaChat called", "prompt", prompt)
+    return "Mock design description: Modern minimalist interior with light colors", nil
+}
 
 	// Реализация по аналогии с Kandinsky
 	// Возвращаем пути к сгенерированным изображениям
