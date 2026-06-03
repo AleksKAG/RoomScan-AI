@@ -24,14 +24,8 @@ func NewClient(redisAddr string) *Client {
 }
 
 func (c *Client) EnqueueProcessVideo(taskID, filePath string) error {
-	payload := map[string]string{
-		"id":   taskID,
-		"path": filePath,
-	}
-	
 	task := asynq.NewTask(TypeProcessVideo, []byte(fmt.Sprintf(`{"id":"%s","path":"%s"}`, taskID, filePath)))
 	
-	// Настройки задачи: 3 попытки, задержка между попытками увеличивается
 	info, err := c.redis.EnqueueContext(context.Background(), task, asynq.MaxRetry(3), asynq.Timeout(5*time.Minute))
 	if err != nil {
 		return fmt.Errorf("failed to enqueue task: %w", err)
