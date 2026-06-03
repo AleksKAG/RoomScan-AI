@@ -11,6 +11,7 @@ import (
 	"github.com/hibiken/asynq"
 	"gocv.io/x/gocv"
 
+	"roomscan-ai/internal/ai"
 	"roomscan-ai/internal/config"
 	"roomscan-ai/internal/db"
 	"roomscan-ai/internal/geometry"
@@ -19,10 +20,11 @@ import (
 type Processor struct {
 	cfg *config.Config
 	db  *db.Store
+	ai  *ai.Generator
 }
 
-func NewProcessor(cfg *config.Config, db *db.Store) *Processor {
-	return &Processor{cfg: cfg, db: db}
+func NewProcessor(cfg *config.Config, db *db.Store, aiGen *ai.Generator) *Processor {
+	return &Processor{cfg: cfg, db: db, ai: aiGen}
 }
 
 func (p *Processor) HandleProcessVideo(ctx context.Context, t *asynq.Task) error {
@@ -56,14 +58,8 @@ func (p *Processor) HandleProcessVideo(ctx context.Context, t *asynq.Task) error
 	}
 	defer os.Remove(framePath)
 
-	lines, err := geometry.DetectLines(
-		framePath, 
-		p.cfg.CannyThreshold1, 
-		p.cfg.CannyThreshold2, 
-		p.cfg.HoughThreshold, 
-		p.cfg.MinLineLength, 
-		p.cfg.MaxLineGap,
-	)
+	// 1. Геометрия
+	lines, err := geometry.DetectLines(framePath, p.cfg.CannyThreshold1, p.cfg.CannyThreshold2, p.cfg.HoughThreshold, p.cfg.MinLineLength, p.cfg.MaxLineGap)
 	if err != nil {
 		processErr = err
 		return processErr
@@ -77,10 +73,34 @@ func (p *Processor) HandleProcessVideo(ctx context.Context, t *asynq.Task) error
 		return processErr
 	}
 
+	// 2. AI Генерация дизайна (Новый этап)
+	polyJSON, _ := json.Marshal(poly)
+	prompt, err := p.ai.GenerateDesignPrompt(ctx, "guest_room", string(polyJSON))
+	if err != nil {
+		slog.Warn("Failed to generate prompt, using default", "error", err)
+		prompt = "Modern minimalist room interior, bright colors, high quality, 4k"
+	}
+
+	imageData, err := p.ai.GenerateImage(ctx, prompt)
+	if err != nil {
+		processErr = fmt.Errorf("ai generate image: %w", err)
+		return processErr
+	}
+
+	// 3. Сохранение сгенерированного изображения
+	designPath := filepath.Join(p.cfg.UploadDir, payload.ID+"_design.jpg")
+	if err := os.WriteFile(designPath, imageData, 0644); err != nil {
+		processErr = fmt.Errorf("save design image: %w", err)
+		return processErr
+	}
+
 	resultURL := "/uploads/" + payload.ID + "_result.json"
-	p.db.UpdateStatus(ctx, payload.ID, db.StatusCompleted, resultURL, "")
+	designURL := "/uploads/" + payload.ID + "_design.jpg"
 	
-	slog.Info("Processing completed", "id", payload.ID)
+	// Обновляем статус и сохраняем URL дизайна в БД (предполагается, что вы добавите поле design_url в таблицу scans, или можно сохранить в result_url как JSON)
+	p.db.UpdateStatus(ctx, payload.ID, db.StatusCompleted, resultURL+"|"+designURL, "")
+	
+	slog.Info("Processing and AI generation completed", "id", payload.ID)
 	return nil
 }
 
