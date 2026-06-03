@@ -1,5 +1,5 @@
 # RoomScan-AI
-![Y8QXW](https://github.com/user-attachments/assets/3b9747de-e70e-4dc6-a0b5-2e192342fa45)
+
 
 ```markdown
 # RoomScan-AI  — Сканируй комнату → Получай дизайн в AR за 30 секунд
