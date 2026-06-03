@@ -30,7 +30,7 @@ RUN go mod download
 COPY . .
 
 # Сборка бинарного файла (статическая линковка предпочтительна, но для OpenCV нужны динамические библиотеки)
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o roomscan .
+RUN CGO_ENABLED=1 GOOS=linux go build -a -o roomscan ./cmd/api
 
 # --- Этап 2: Рантайм ---
 FROM debian:bullseye-slim
