@@ -39,26 +39,28 @@ func (c *Client) Close() {
 	c.redis.Close()
 }
 
-// --- Server & Handler ---
+// VideoProcessor определяет интерфейс для обработки видео
+type VideoProcessor interface {
+	HandleProcessVideo(ctx context.Context, t *asynq.Task) error
+}
 
 type Server struct {
 	srv *asynq.Server
 }
 
-func NewServer(redisAddr string, handler asynq.Handler) *Server {
+func NewServer(redisAddr string, processor VideoProcessor) *Server {
 	srv := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: redisAddr},
 		asynq.Config{
-			Concurrency: 5, // Максимум 5 видео обрабатываются одновременно
+			Concurrency: 5,
 			Queues: map[string]int{
 				"default": 10,
 			},
-		
 		},
 	)
 
 	mux := asynq.NewServeMux()
-	mux.HandleFunc(TypeProcessVideo, handler.HandleProcessVideo)
+	mux.HandleFunc(TypeProcessVideo, processor.HandleProcessVideo)
 
 	srv.Start(mux)
 	return &Server{srv: srv}
